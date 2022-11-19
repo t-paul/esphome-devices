@@ -1,0 +1,388 @@
+esphome:
+  name: led-strip
+  comment: LED Strip
+  on_boot:
+    then:
+      - light.turn_on:
+          id: led_strip
+          brightness: 50%
+          effect: "Color Shift"
+
+esp32:
+  board: wemos_d1_mini32
+  framework:
+    type: arduino
+
+sensor:
+  - platform: uptime
+    name: "Uptime"
+
+time:
+  - platform: sntp
+    id: esptime
+    timezone: "Europe/Berlin"
+
+font:
+  - file: "fonts/Iosevka/Iosevka Term Nerd Font Complete.ttf"
+    id: font_iosevka_10
+    size: 10
+  - file: "fonts/Iosevka/Iosevka Term Nerd Font Complete.ttf"
+    id: font_iosevka_20
+    size: 20
+  - file: "fonts/Iosevka/Iosevka Term Nerd Font Complete.ttf"
+    id: font_iosevka_22
+    size: 22
+
+script:
+  - id: delayed_select_time
+    mode: restart
+    then:
+      - delay: !lambda "return id(menu_delay).state * 1000;"
+      - select.set:
+          id: setting
+          option: "Time"
+
+number:
+  - platform: template
+    id: menu_delay
+    name: "Menu Delay"
+    optimistic: true
+    min_value: 30
+    max_value: 3000
+    step: 1
+
+select:
+  - platform: template
+    id: setting
+    name: "Setting"
+    optimistic: true
+    options:
+      - Time
+      - Effekt
+      - Helligkeit
+      - Color
+    initial_option: Time
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: |-
+                return id(setting).active_index().value_or(0) > 0;
+            then:
+              - script.execute: delayed_select_time
+  - platform: template
+    id: timeformat
+    name: "Time Format"
+    optimistic: true
+    options:
+      - Time
+      - TimeSeconds
+      - TimeSecondsDate
+      - IsoDateWeekday
+      - DateWeekday
+      - DateTime
+      - DateTimeSeconds
+    initial_option: Time
+
+display:
+  - platform: ssd1306_i2c
+    model: "SSD1306 128x32"
+    lambda: |-
+      const int y = 10;
+      const int c = it.get_width() / 2;
+      esphome::time::ESPTime time = id(esptime).now();
+      size_t s = id(setting)->active_index().value_or(0);
+      if (s == 1) {
+        it.print(0, 0, id(font_iosevka_10), "Effekt");
+        it.printf(c, y, id(font_iosevka_20), TextAlign::TOP_CENTER, "%s", id(led_strip).get_effect_name().c_str());
+      } else if (s == 2) {
+        it.print(0, 0, id(font_iosevka_10), "Helligkeit");
+        float b;
+        id(led_strip).current_values_as_brightness(&b);
+        it.rectangle(0, y + 2, it.get_width(), it.get_height() - y - 2);
+        it.filled_rectangle(2, y + 4, std::floor(b * (it.get_width() - 4)), it.get_height() - y - 6);
+      } else if (s == 3) {
+        it.print(0, 0, id(font_iosevka_10), "Farbe");
+        int hue;
+        float r, g, b, _s, _v;
+        id(led_strip).current_values_as_rgb(&r, &g, &b);
+        esphome::rgb_to_hsv(r, g, b, hue, _s, _v); 	
+        it.rectangle(0, y + 2, it.get_width(), it.get_height() - y - 2);
+        it.filled_rectangle(2, y + 4, std::floor((hue * (it.get_width() - 4)) / 360.0), it.get_height() - y - 6);
+      } else {
+        it.print(0, 0, id(font_iosevka_10), "Time");
+        size_t t = id(timeformat).active_index().value_or(0);
+        if (!time.is_valid()) {
+          it.print(c, y, id(font_iosevka_22), TextAlign::TOP_CENTER, "--:--");
+        } else if (t == 1) {
+          it.strftime(c, y, id(font_iosevka_22), TextAlign::TOP_CENTER, "%X", time);
+        } else if (t == 2) {
+          it.strftime(it.get_width(), 0, id(font_iosevka_10), TextAlign::TOP_RIGHT, "%F", time);
+          it.strftime(c, y, id(font_iosevka_22), TextAlign::TOP_CENTER, "%X", time);
+        } else if (t == 3) {
+          it.strftime(it.get_width(), 0, id(font_iosevka_10), TextAlign::TOP_RIGHT, "%A", time);
+          it.strftime(c, y, id(font_iosevka_22), TextAlign::TOP_CENTER, "%F", time);
+        } else if (t == 4) {
+          it.strftime(it.get_width(), 0, id(font_iosevka_10), TextAlign::TOP_RIGHT, "%A", time);
+          it.strftime(c, y, id(font_iosevka_22), TextAlign::TOP_CENTER, "%d.%b.%Y", time);
+        } else if (t == 5) {
+          it.strftime(it.get_width(), 0, id(font_iosevka_10), TextAlign::TOP_RIGHT, "%R", time);
+          it.strftime(c, y, id(font_iosevka_22), TextAlign::TOP_CENTER, "%d.%b.%Y", time);
+        } else if (t == 6) {
+          it.strftime(it.get_width(), 0, id(font_iosevka_10), TextAlign::TOP_RIGHT, "%X", time);
+          it.strftime(c, y, id(font_iosevka_22), TextAlign::TOP_CENTER, "%d.%b.%Y", time);
+        } else {
+          it.strftime(c, y, id(font_iosevka_22), TextAlign::TOP_CENTER, "%R", time);
+        }
+      }
+
+i2c:
+  sda: 16
+  scl: 17
+  scan: true
+
+binary_sensor:
+    # left
+  - platform: gpio
+    id: button_green
+    pin:
+      number: GPIO19
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    name: "Button Green"
+    on_press:
+      then:
+        - script.execute: delayed_select_time
+        - if: # Time
+            condition:
+              lambda: return id(setting).active_index().value_or(-1) == 0;
+            then:
+              - script.execute: delayed_select_time
+              - select.previous: timeformat
+        - if: # Effect
+            condition:
+              lambda: |-
+                return id(setting).active_index().value_or(-1) == 1;
+            then:
+              lambda: |-
+                const auto active = id(led_strip).get_effect_name();
+                const auto effects = id(led_strip).get_effects();
+                int nr = 0;
+                for (int idx = 0;idx < effects.size();idx++) {
+                  if (active == effects.at(idx)->get_name()) {
+                    nr = idx + 1;
+                    break;
+                  }
+                }
+                nr = (nr + effects.size()) % (effects.size() + 1);
+                const auto name = nr == 0 ? "None" : effects.at(nr - 1)->get_name(); 
+                id(led_strip).turn_on().set_effect(name).perform();
+        - if: # Brightness
+            condition:
+              lambda: return id(setting).active_index().value_or(-1) == 2;
+            then:
+              - while:
+                  condition:
+                    binary_sensor.is_on: button_green
+                  then:
+                    - light.dim_relative:
+                        id: led_strip
+                        relative_brightness: -5%
+                        transition_length: 0.1s
+                    - delay: 0.2s
+        - if: # Color
+            condition:
+              lambda: return id(setting).active_index().value_or(-1) == 3;
+            then:
+              - lambda: |-
+                  int hue;
+                  float r, g, b, s, v;
+                  id(led_strip).current_values_as_rgb(&r, &g, &b);
+                  esphome::rgb_to_hsv(r, g, b, hue, s, v);
+                  hue = std::max(0, hue - 30);
+                  esphome::hsv_to_rgb(hue, s, v, r, g, b);
+                  id(led_strip).turn_on().set_rgb(r, g, b).set_transition_length(100).perform();
+
+    # right
+  - platform: gpio
+    id: button_blue
+    pin:
+      number: GPIO18
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    name: "Button Blue"
+    on_press:
+      then:
+        - script.execute: delayed_select_time
+        - if: # Time
+            condition:
+              lambda: |-
+                return id(setting).active_index().value_or(-1) == 0;
+            then:
+              - select.next: timeformat
+        - if: # Effect
+            condition:
+              lambda: |-
+                return id(setting).active_index().value_or(-1) == 1;
+            then:
+              lambda: |-
+                const auto active = id(led_strip).get_effect_name();
+                const auto effects = id(led_strip).get_effects();
+                int nr = 0;
+                for (int idx = 0;idx < effects.size();idx++) {
+                  if (active == effects.at(idx)->get_name()) {
+                    nr = idx + 1;
+                    break;
+                  }
+                }
+                nr = (nr + 1) % (effects.size() + 1);
+                const auto name = nr == 0 ? "None" : effects.at(nr - 1)->get_name(); 
+                id(led_strip).turn_on().set_effect(name).perform();
+        - if: # Brightness
+            condition:
+              lambda: |-
+                return id(setting).active_index().value_or(-1) == 2;
+            then:
+              - while:
+                  condition:
+                    binary_sensor.is_on: button_blue
+                  then:
+                    - light.dim_relative:
+                        id: led_strip
+                        relative_brightness: 5%
+                        transition_length: 0.1s
+                    - delay: 0.2s
+        - if: # Color
+            condition:
+              lambda: |-
+                return id(setting).active_index().value_or(-1) == 3;
+            then:
+              - lambda: |-
+                  int hue;
+                  float r, g, b, s, v;
+                  id(led_strip).current_values_as_rgb(&r, &g, &b);
+                  esphome::rgb_to_hsv(r, g, b, hue, s, v);
+                  hue = std::min(359, hue + 30);
+                  esphome::hsv_to_rgb(hue, s, v, r, g, b);
+                  id(led_strip).turn_on().set_rgb(r, g, b).set_transition_length(100).perform();
+
+    # up
+  - platform: gpio
+    id: button_red
+    pin:
+      number: GPIO21
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    name: "Button Red"
+    on_press:
+      select.previous: setting
+
+    # down
+  - platform: gpio
+    id: button_yellow
+    pin:
+      number: GPIO22
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    name: "Button Yellow"
+    on_press:
+      - select.next: setting
+
+light:
+  - platform: neopixelbus
+    name: "Led Strip"
+    id: led_strip
+    pin: GPIO26
+    method:
+      type: esp32_i2s
+    type: RGB
+    variant: WS2811
+    num_leds: 100
+    effects:
+      - addressable_rainbow:
+          speed: 8
+      - addressable_color_wipe:
+          colors:
+            - red: 50%
+              green: 50%
+              blue: 50%
+              num_leds: 1
+          add_led_interval: 200ms
+      - addressable_twinkle:
+          twinkle_probability: 25%
+          progress_interval: 8ms
+      - addressable_random_twinkle:
+          twinkle_probability: 80%
+          progress_interval: 20ms
+      - addressable_lambda:
+          name: "Sparkle"
+          update_interval: 1s
+          lambda: |-
+            Color c = Color::random_color();
+            const size_t pos = random_uint32() % it.size();
+            it[pos] = ESPColor(c.r, c.g, c.b);
+      - addressable_lambda:
+          name: "Color Shift"
+          update_interval: 20ms
+          lambda: |-
+            constexpr int count = 100;
+            struct data_t { size_t pos; int frame; int hue; float s; float v; };
+            static data_t data[count] = { { 0, 0, 0, 0, 0 }, };
+            
+            for (int idx = 0;idx < count;idx++) {            
+                data[idx].frame--;
+                if (data[idx].frame < -10) {
+                    size_t pos = random_uint32() % it.size();
+                    data[idx].pos = pos;
+                    data[idx].frame = 20 + (random_uint32() % 20);
+                    if (!it[pos].get().is_on()) {
+                        it[pos] = Color::random_color();
+                    }
+                    float r, g, b;
+                    esphome::rgb_to_hsv(it[pos].get_red() / 255.0, it[pos].get_green() / 255.0, it[pos].get_blue() / 255.0, data[idx].hue, data[idx].s, data[idx].v);
+                }
+            
+                if (data[idx].frame >= 0) {
+                    float r, g, b;
+                    data[idx].hue = (data[idx].hue + 2) % 360;
+                    esphome::hsv_to_rgb(data[idx].hue, data[idx].s, data[idx].v, r, g, b);
+                    it[data[idx].pos] = Color(255 * r, 255 * g, 255 * b);
+                }
+            }
+
+logger:
+
+captive_portal:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  ap:
+    ssid: "Led-Strip"
+    password: !secret captive_portal_password
+
+api:
+  reboot_timeout: 15min
+  password: !secret api_password
+  encryption:
+    key: !secret api_psk
+
+web_server:
+  ota: false
+  port: !secret web_server_port
+  auth:
+    username: !secret web_server_user
+    password: !secret web_server_password
+
+ota:
+  password: !secret ota_password
+

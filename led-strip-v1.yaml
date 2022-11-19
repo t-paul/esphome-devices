@@ -1,0 +1,148 @@
+esphome:
+  name: led-strip
+  comment: LED Strip
+  on_boot:
+    then:
+      - light.turn_on:
+          id: led_strip
+          brightness: 50%
+          effect: "Color Shift"
+
+esp32:
+  board: wemos_d1_mini32
+  framework:
+    type: arduino
+
+sensor:
+  - platform: uptime
+    name: "Uptime"
+
+time:
+  - platform: sntp
+    id: esptime
+    timezone: "Europe/Berlin"
+
+binary_sensor:
+  - platform: gpio
+    id: button_white
+    pin:
+      number: GPIO21
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    name: "Button White"
+    on_multi_click:
+    - timing:
+        - ON for at most 1s
+        - OFF for at most 1s
+        - ON for at most 1s
+        - OFF for at least 0.2s
+      then:
+        - logger.log: "Double Clicked"
+        - light.turn_on:
+            id: led_strip
+            effect: "Sparkle"
+    - timing:
+        - ON for 1s to 2s
+        - OFF for at least 0.5s
+      then:
+        - logger.log: "Single Long Clicked"
+        - light.toggle:
+            id: led_strip
+    - timing:
+        - ON for at most 1s
+        - OFF for at least 0.5s
+      then:
+        - logger.log: "Single Short Clicked"
+
+light:
+  - platform: neopixelbus
+    name: "Led Strip"
+    id: led_strip
+    pin: GPIO16
+    method:
+      type: esp32_i2s
+    type: RGB
+    variant: WS2811
+    num_leds: 100
+    effects:
+      - addressable_rainbow:
+          speed: 8
+      - addressable_color_wipe:
+          colors:
+            - red: 50%
+              green: 50%
+              blue: 50%
+              num_leds: 1
+          add_led_interval: 200ms
+      - addressable_twinkle:
+          twinkle_probability: 25%
+          progress_interval: 8ms
+      - addressable_random_twinkle:
+          twinkle_probability: 80%
+          progress_interval: 20ms
+      - addressable_lambda:
+          name: "Sparkle"
+          update_interval: 1s
+          lambda: |-
+            Color c = Color::random_color();
+            const size_t pos = random_uint32() % it.size();
+            it[pos] = ESPColor(c.r, c.g, c.b);
+      - addressable_lambda:
+          name: "Color Shift"
+          update_interval: 20ms
+          lambda: |-
+            constexpr int count = 100;
+            struct data_t { size_t pos; int frame; int hue; float s; float v; };
+            static data_t data[count] = { { 0, 0, 0, 0, 0 }, };
+            
+            for (int idx = 0;idx < count;idx++) {            
+                data[idx].frame--;
+                if (data[idx].frame < -10) {
+                    size_t pos = random_uint32() % it.size();
+                    data[idx].pos = pos;
+                    data[idx].frame = 20 + (random_uint32() % 20);
+                    if (!it[pos].get().is_on()) {
+                        it[pos] = Color::random_color();
+                    }
+                    float r, g, b;
+                    esphome::rgb_to_hsv(it[pos].get_red() / 255.0, it[pos].get_green() / 255.0, it[pos].get_blue() / 255.0, data[idx].hue, data[idx].s, data[idx].v);
+                }
+            
+                if (data[idx].frame >= 0) {
+                    float r, g, b;
+                    data[idx].hue = (data[idx].hue + 2) % 360;
+                    esphome::hsv_to_rgb(data[idx].hue, data[idx].s, data[idx].v, r, g, b);
+                    it[data[idx].pos] = Color(255 * r, 255 * g, 255 * b);
+                }
+            }
+
+logger:
+
+captive_portal:
+
+wifi:
+  ssid: !secret m_ssid
+  password: !secret m_password
+
+  ap:
+    ssid: "Led-Strip"
+    password: !secret captive_portal_password
+
+api:
+  reboot_timeout: 0s
+  password: !secret api_password
+  encryption:
+    key: !secret api_psk
+
+web_server:
+  ota: false
+  port: !secret web_server_port
+  auth:
+    username: !secret web_server_user
+    password: !secret web_server_password
+
+ota:
+  password: !secret ota_password
+
