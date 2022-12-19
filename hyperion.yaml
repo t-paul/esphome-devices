@@ -1,0 +1,72 @@
+esphome:
+  name: hyperion
+  comment: Arcade Button Board
+
+esp32:
+  board: wemos_d1_mini32
+
+sensor:
+  - platform: uptime
+    name: "Uptime"
+
+binary_sensor:
+  - platform: gpio
+    id: hyperion_button_green
+    pin:
+      number: GPIO27
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    name: "Button Green"
+  - platform: gpio
+    id: hyperion_button_yellow
+    pin:
+      number: GPIO32
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    name: "Button Yellow"
+  - platform: gpio
+    id: hyperion_button_red
+    pin:
+      number: GPIO18
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    name: "Button Red"
+  - platform: gpio
+    id: hyperion_button_white
+    pin:
+      number: GPIO19
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    name: "Button White"
+  - platform: gpio
+    id: hyperion_button_blue
+    pin:
+      number: GPIO23
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    name: "Button Blue"
+
+logger:
+
+wifi:
+    ssid: !secret iot_ssid
+    password: !secret iot_password
+    use_address: !secret iot_ip_hyperion
+
+api:
+    password: !secret api_password
+    encryption:
+        key: !secret api_psk
+
+ota:
+    password: !secret ota_password
