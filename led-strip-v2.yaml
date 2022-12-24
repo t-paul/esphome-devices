@@ -5,6 +5,9 @@ esphome:
     then:
       - light.turn_on:
           id: led_strip
+          red: 100%
+          green: 50%
+          blue: 0%
           brightness: 50%
           effect: "Color Shift"
 
@@ -306,6 +309,7 @@ light:
     type: RGB
     variant: WS2811
     num_leds: 100
+    restore_mode: ALWAYS_ON
     effects:
       - addressable_rainbow:
           speed: 8
