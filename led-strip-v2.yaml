@@ -380,13 +380,6 @@ api:
   encryption:
     key: !secret api_psk
 
-web_server:
-  ota: false
-  port: !secret web_server_port
-  auth:
-    username: !secret web_server_user
-    password: !secret web_server_password
-
 ota:
   password: !secret ota_password
 
