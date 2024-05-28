@@ -1,0 +1,154 @@
+esphome:
+  name: scarvix
+  comment: LED Matrix Board
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: arduino
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: Scarvix IP Address
+    ssid:
+      name: Scarvix Connected SSID
+    bssid:
+      name: Scarvix Connected BSSID
+    mac_address:
+      name: Scarvix Mac Wifi Address
+    scan_results:
+      name: Scarvix Latest Scan Results
+    dns_address:
+      name: Scarvix DNS Address
+
+font:
+  - id: font_clock
+    file: "fonts/Spleen/SpleenttMedium-8.bdf"
+    glyphs: [0,1,2,3,4,5,6,7,8,9]
+
+sensor:
+  - platform: uptime
+    name: "Uptime"
+
+time:
+  - platform: homeassistant
+    id: esptime
+    timezone: "Europe/Berlin"
+
+select:
+  - platform: template
+    id: scarvix_page
+    name: "Page"
+    optimistic: true
+    options:
+      - color
+      - clock
+    initial_option: clock
+
+number:
+  - platform: template
+    id: scarvix_number
+    name: "Number"
+    optimistic: true
+    min_value: 0
+    max_value: 9
+    step: 1
+
+binary_sensor:
+  - platform: gpio
+    id: scarvix_touch_sensor_mode
+    name: "Touch Sensor Mode"
+    pin: GPIO8
+  - platform: gpio
+    id: scarvix_touch_sensor_left
+    name: "Touch Sensor Left"
+    pin: GPIO9
+    on_click:
+      then:
+        - number.decrement: scarvix_number
+  - platform: gpio
+    id: scarvix_touch_sensor_middle
+    name: "Touch Sensor Middle"
+    pin: GPIO10
+    on_click:
+      - min_length: 50ms
+        max_length: 350ms
+        then:
+          - select.next: scarvix_page
+      - min_length: 500ms
+        max_length: 1000ms
+        then:
+          - select.previous: scarvix_page
+  - platform: gpio
+    id: scarvix_touch_sensor_right
+    name: "Touch Sensor Right"
+    pin: GPIO11
+    on_click:
+      then:
+        - number.increment: scarvix_number
+
+light:
+  - platform: neopixelbus
+    id: scarvix_led_matrix
+    name: "LED Matrix"
+    pin: GPIO7
+    type: grb
+    variant: ws2812
+    num_leds: 192
+    gamma_correct: 1
+    color_correct: [4%, 4%, 4%]
+
+display:
+  - platform: addressable_light
+    id: scarvix_led_matrix_display
+    addressable_light_id: scarvix_led_matrix
+    width: 24
+    height: 8
+    pixel_mapper: |-
+      return 8 * (23 - x) + y;
+    update_interval: 200ms
+    lambda: |-
+      static bool col = false;
+      static bool latch = false;
+      const std::array<esphome::Color, 10> colors = {
+        Color(255, 0, 0),
+        Color(0, 255, 0),
+        Color(0, 0, 255),
+        Color(255, 255, 0),
+        Color(255, 0, 255),
+        Color(0, 255, 255),
+        Color(255, 255, 255),
+        Color(128, 128, 128),
+        Color(64, 64, 64),
+        Color(0, 0, 0),
+      };
+
+      const auto nr = static_cast<int>(id(scarvix_number).state);
+      const auto page = id(scarvix_page).active_index().value_or(0);
+      if (page == 0) {
+        it.filled_rectangle(0, 0, it.get_width(), it.get_height(), colors[nr]);
+      } else {
+        const auto col = colors[nr];
+        const auto time = id(esptime).now();
+        it.strftime(1, 0, id(font_clock), col, "%H", time);
+        it.strftime(13, 0, id(font_clock), col, "%M", time);
+
+        const auto dotcol = time.second % 2 == 0 ? col : Color(0, 0, 0);
+        it.draw_pixel_at(11, 2, dotcol);
+        it.draw_pixel_at(11, it.get_height() - 3, dotcol);
+      }
+
+logger:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+  encryption:
+    key: !secret api_psk
+
+ota:
+  password: !secret ota_password
+
