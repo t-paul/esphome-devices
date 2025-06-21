@@ -1,0 +1,87 @@
+esphome:
+  name: vehicon
+  comment: LED Matrix
+  includes:
+    - functions.h
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: arduino
+
+time:
+  - platform: homeassistant
+    id: esptime
+    timezone: "Europe/Berlin"
+
+sensor:
+  - platform: uptime
+    name: "Uptime"
+
+binary_sensor:
+  - platform: gpio
+    id: vehicon_touch_sensor_left
+    name: "Touch Sensor Left"
+    pin: GPIO7
+  - platform: gpio
+    id: vehicon_touch_sensor_middle
+    name: "Touch Sensor Middle"
+    pin: GPIO8
+  - platform: gpio
+    id: vehicon_touch_sensor_right
+    name: "Touch Sensor Right"
+    pin: GPIO9
+  - platform: homeassistant
+    id: door_sleeping_room
+    entity_id: binary_sensor.lumi_magnet_1_opening
+    internal: true
+  - platform: homeassistant
+    id: door_living_room
+    entity_id: binary_sensor.lumi_magnet_2_opening
+    internal: true
+  - platform: homeassistant
+    id: door_hall
+    entity_id: binary_sensor.lumi_magnet_3_opening
+    internal: true
+
+light:
+  - platform: neopixelbus
+    id: vehicon_led_matrix
+    name: "LED Matrix"
+    pin: GPIO1
+    type: grb
+    variant: ws2812
+    num_leds: 64
+    gamma_correct: 1
+    color_correct: [5%, 5%, 5%]
+
+display:
+  - platform: addressable_light
+    id: vehicon_led_matrix_display
+    addressable_light_id: vehicon_led_matrix
+    width: 8
+    height: 8
+    pixel_mapper: |-
+      return 8 * (7 - x) + y;
+    update_interval: 200ms
+    lambda: |-
+      static const auto red = Color(255, 0, 0);
+      static const auto green = Color(0, 255, 0);
+      static const auto yellow = Color(255, 255, 0);
+      it.filled_rectangle(0, 0, it.get_width(), 1, get_binary_sensor_color(id(door_sleeping_room), yellow, red, green));
+      it.filled_rectangle(0, 1, it.get_width(), 1, get_binary_sensor_color(id(door_living_room), yellow, red, green));
+      it.filled_rectangle(0, 2, it.get_width(), 1, get_binary_sensor_color(id(door_hall), yellow, red, green));
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_psk
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
