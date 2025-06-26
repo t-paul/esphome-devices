@@ -54,6 +54,11 @@ light:
     num_leds: 64
     gamma_correct: 1
     color_correct: [5%, 5%, 5%]
+    default_transition_length: 0s
+    restore_mode: ALWAYS_ON
+    initial_state:
+      state: True
+      brightness: 40%
 
 display:
   - platform: addressable_light
@@ -68,9 +73,11 @@ display:
       static const auto red = Color(255, 0, 0);
       static const auto green = Color(0, 255, 0);
       static const auto yellow = Color(255, 255, 0);
-      it.filled_rectangle(0, 0, it.get_width(), 1, get_binary_sensor_color(id(door_sleeping_room), yellow, red, green));
-      it.filled_rectangle(0, 1, it.get_width(), 1, get_binary_sensor_color(id(door_living_room), yellow, red, green));
-      it.filled_rectangle(0, 2, it.get_width(), 1, get_binary_sensor_color(id(door_hall), yellow, red, green));
+      if (id(vehicon_led_matrix).current_values.is_on()) {
+        it.filled_rectangle(0, 0, it.get_width(), 1, get_binary_sensor_color(id(door_sleeping_room), yellow, red, green));
+        it.filled_rectangle(0, 1, it.get_width(), 1, get_binary_sensor_color(id(door_living_room), yellow, red, green));
+        it.filled_rectangle(0, 2, it.get_width(), 1, get_binary_sensor_color(id(door_hall), yellow, red, green));
+      }
 
 logger:
 
